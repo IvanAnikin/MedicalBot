@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MedicalBot - Medical Report Assistant</title>
+    <style>
+        :root {
+            --bg: #0f172a;
+            --bg-secondary: #1e293b;
+            --card: #1e293b;
+            --border: #334155;
+            --text: #f1f5f9;
+            --text-secondary: #cbd5e1;
+            --accent: #06b6d4;
+            --accent-hover: #0891b2;
+            --danger: #ef4444;
+            --danger-hover: #dc2626;
+            --success: #10b981;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, var(--bg) 0%, var(--bg-secondary) 100%);
+            color: var(--text);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+            padding: 0 10px;
+        }
+
+        .header h1 {
+            font-size: 28px;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--accent), #06d6ff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .status-pill {
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 600;
+            background: var(--card);
+            border: 1px solid var(--border);
+            color: var(--text-secondary);
+        }
+
+        .status-pill.ready {
+            background: rgba(16, 185, 129, 0.1);
+            color: var(--success);
+            border-color: var(--success);
+        }
+
+        .status-pill.recording {
+            background: rgba(239, 68, 68, 0.1);
+            color: var(--danger);
+            border-color: var(--danger);
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+
+        .container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        }
+
+        .card-title {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 16px;
+            color: var(--text);
+        }
+
+        textarea {
+            flex: 1;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 12px;
+            color: var(--text);
+            font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
+            font-size: 14px;
+            line-height: 1.5;
+            resize: none;
+            min-height: 400px;
+        }
+
+        textarea::placeholder {
+            color: var(--text-secondary);
+        }
+
+        textarea:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 2px rgba(6, 182, 212, 0.1);
+        }
+
+        .controls-section {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .button-group {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+
+        button {
+            padding: 12px 16px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .btn-primary {
+            background: var(--accent);
+            color: white;
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            background: var(--accent-hover);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 16px rgba(6, 182, 212, 0.3);
+        }
+
+        .btn-primary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn-secondary {
+            background: var(--bg);
+            color: var(--text);
+            border: 1px solid var(--border);
+        }
+
+        .btn-secondary:hover:not(:disabled) {
+            background: var(--border);
+            transform: translateY(-2px);
+        }
+
+        .btn-secondary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn-danger {
+            background: transparent;
+            color: var(--danger);
+            border: 1px solid var(--danger);
+            grid-column: 1 / -1;
+        }
+
+        .btn-danger:hover:not(:disabled) {
+            background: rgba(239, 68, 68, 0.1);
+            border-color: var(--danger-hover);
+        }
+
+        .btn-generate {
+            grid-column: 1 / -1;
+            background: var(--success);
+            color: white;
+        }
+
+        .btn-generate:hover:not(:disabled) {
+            background: #059669;
+            transform: translateY(-2px);
+        }
+
+        .error-banner {
+            display: none;
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid var(--danger);
+            border-radius: 8px;
+            padding: 12px 16px;
+            color: var(--danger);
+            font-size: 14px;
+        }
+
+        .error-banner.show {
+            display: block;
+            animation: slideIn 0.3s ease;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .helper-text {
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-top: 8px;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid rgba(6, 182, 212, 0.3);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin-right: 8px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .right-column {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        @media (max-width: 1024px) {
+            .container {
+                grid-template-columns: 1fr;
+            }
+
+            .button-group {
+                grid-template-columns: 1fr 1fr;
+            }
+        }
+
+        @media (max-width: 640px) {
+            body {
+                padding: 12px;
+            }
+
+            .header {
+                flex-direction: column;
+                gap: 12px;
+                align-items: flex-start;
+            }
+
+            .header h1 {
+                font-size: 24px;
+            }
+
+            .card {
+                padding: 16px;
+            }
+
+            textarea {
+                min-height: 300px;
+            }
+
+            .button-group {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🏥 MedicalBot</h1>
+        <div class="status-pill ready" id="statusPill">Ready</div>
+    </div>
+
+    <div class="container">
+        <!-- Left Column: Report -->
+        <div class="card">
+            <div class="card-title">📋 Structured Report</div>
+            <textarea id="report" placeholder="Structured medical report will appear here after generation..."></textarea>
+            <div class="helper-text">Generated report with standard medical sections</div>
+        </div>
+
+        <!-- Right Column: Controls & Transcript -->
+        <div class="right-column">
+            <!-- Controls Card -->
+            <div class="card controls-section">
+                <div class="card-title">🎙️ Controls</div>
+                
+                <div class="error-banner" id="errorBanner"></div>
+
+                <div class="button-group">
+                    <button class="btn-primary" id="startBtn" onclick="startRecording()">Start</button>
+                    <button class="btn-primary" id="stopBtn" onclick="stopRecording()" disabled>Stop</button>
+                </div>
+
+                <button class="btn-generate" id="generateBtn" onclick="generateReport()" disabled>
+                    Generate Report
+                </button>
+
+                <button class="btn-danger" id="clearBtn" onclick="clearAll()">Clear All</button>
+            </div>
+
+            <!-- Transcript Card -->
+            <div class="card">
+                <div class="card-title">📝 Transcript</div>
+                <textarea id="transcript" placeholder="Live transcript will appear here during recording..."></textarea>
+                <div class="helper-text">Recording auto-transcription in real-time</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const config = {
+            pollInterval: 500, // ms
+            apiBase: ''
+        };
+
+        let recordingState = {
+            isRecording: false,
+            pollInterval: null
+        };
+
+        // ======================
+        // UI Helper Functions
+        // ======================
+
+        function setStatus(text, type = 'ready') {
+            const pill = document.getElementById('statusPill');
+            pill.textContent = text;
+            pill.className = `status-pill ${type}`;
+        }
+
+        function setError(message) {
+            const banner = document.getElementById('errorBanner');
+            banner.textContent = message;
+            banner.classList.add('show');
+            setTimeout(() => banner.classList.remove('show'), 5000);
+        }
+
+        function clearError() {
+            document.getElementById('errorBanner').classList.remove('show');
+        }
+
+        function setLoading(on, label = 'Processing...') {
+            const generateBtn = document.getElementById('generateBtn');
+            if (on) {
+                generateBtn.innerHTML = `<span class="loading"></span>${label}`;
+                generateBtn.disabled = true;
+            } else {
+                generateBtn.innerHTML = 'Generate Report';
+                generateBtn.disabled = false;
+            }
+        }
+
+        function setRecordingState(isRecording) {
+            recordingState.isRecording = isRecording;
+            document.getElementById('startBtn').disabled = isRecording;
+            document.getElementById('stopBtn').disabled = !isRecording;
+            document.getElementById('generateBtn').disabled = isRecording;
+            setStatus(isRecording ? 'Recording' : 'Ready', isRecording ? 'recording' : 'ready');
+        }
+
+        // ======================
+        // API Calls
+        // ======================
+
+        async function apiCall(endpoint, method = 'GET', body = null) {
+            try {
+                const options = {
+                    method,
+                    headers: { 'Content-Type': 'application/json' }
+                };
+
+                if (body) {
+                    options.body = JSON.stringify(body);
+                }
+
+                const response = await fetch(`${config.apiBase}${endpoint}`, options);
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.detail || 'API request failed');
+                }
+
+                return await response.json();
+            } catch (error) {
+                console.error(`API Error [${endpoint}]:`, error);
+                throw error;
+            }
+        }
+
+        // ======================
+        // Recording Functions
+        // ======================
+
+        async function startRecording() {
+            clearError();
+            try {
+                setStatus('Starting...', 'recording');
+                await apiCall('/start_recording', 'POST');
+                setRecordingState(true);
+                pollTranscript();
+            } catch (error) {
+                setError(`Failed to start recording: ${error.message}`);
+                setStatus('Ready', 'ready');
+            }
+        }
+
+        async function stopRecording() {
+            clearError();
+            try {
+                setStatus('Stopping...', 'recording');
+                if (recordingState.pollInterval) {
+                    clearInterval(recordingState.pollInterval);
+                }
+                const data = await apiCall('/stop_recording', 'POST');
+                document.getElementById('transcript').value = data.transcript || '';
+                setRecordingState(false);
+                setStatus('Ready', 'ready');
+            } catch (error) {
+                setError(`Failed to stop recording: ${error.message}`);
+                setStatus('Ready', 'ready');
+            }
+        }
+
+        function pollTranscript() {
+            if (recordingState.pollInterval) {
+                clearInterval(recordingState.pollInterval);
+            }
+
+            recordingState.pollInterval = setInterval(async () => {
+                try {
+                    const data = await apiCall('/transcript');
+                    document.getElementById('transcript').value = data.transcript || '';
+
+                    // Stop polling if recording ended
+                    if (!data.recording) {
+                        clearInterval(recordingState.pollInterval);
+                    }
+                } catch (error) {
+                    console.error('Polling error:', error);
+                    // Continue polling even on error
+                }
+            }, config.pollInterval);
+        }
+
+        // ======================
+        // Report Generation
+        // ======================
+
+        async function generateReport() {
+            clearError();
+            try {
+                setLoading(true, 'Generating Report...');
+                const transcript = document.getElementById('transcript').value;
+
+                if (!transcript.trim()) {
+                    throw new Error('Transcript is empty. Record audio first.');
+                }
+
+                const data = await apiCall('/generate_report', 'POST', { transcript });
+                document.getElementById('report').value = data.report || '';
+                setStatus('Report Generated', 'ready');
+            } catch (error) {
+                setError(`Failed to generate report: ${error.message}`);
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        // ======================
+        // Clear & Reset
+        // ======================
+
+        async function clearAll() {
+            if (!confirm('Clear all transcript and report?')) {
+                return;
+            }
+
+            clearError();
+            try {
+                await apiCall('/reset_session', 'POST');
+                document.getElementById('transcript').value = '';
+                document.getElementById('report').value = '';
+                setRecordingState(false);
+                setStatus('Ready', 'ready');
+            } catch (error) {
+                setError(`Failed to clear session: ${error.message}`);
+            }
+        }
+
+        // ======================
+        // Initialization
+        // ======================
+
+        document.addEventListener('DOMContentLoaded', () => {
+            setStatus('Ready', 'ready');
+            console.log('MedicalBot UI initialized');
+        });
+    </script>
+</body>
+</html>
