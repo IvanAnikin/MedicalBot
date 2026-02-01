@@ -87,6 +87,17 @@ def start_transcription_worker(state: AppState) -> threading.Thread:
                     transcript = transcribe_audio_chunks(audio_data)
                     print(f"✨ Transcription received:\n{transcript}\n")
                     state.set_transcript(transcript)
+                    
+                    # Auto-generate report from transcript
+                    print(f"📋 Auto-generating structured report...")
+                    try:
+                        report = generate_structured_report(transcript)
+                        print(f"✨ Report generated successfully")
+                        state.set_report(report)
+                    except Exception as e:
+                        print(f"❌ Error auto-generating report: {e}")
+                        # Set empty report on error so UI shows something
+                        state.set_report("")
                 except Exception as e:
                     print(f"❌ Error finalizing transcription: {e}")
             else:

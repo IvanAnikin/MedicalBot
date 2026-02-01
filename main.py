@@ -79,14 +79,18 @@ async def stop_recording():
     Stop recording and transcription.
     
     Returns:
-        Status and final transcript
+        Status, final transcript, and auto-generated report
     """
     print("\n" + "="*60)
     print("🔴 STOP_RECORDING endpoint called")
     print("="*60)
     
     if not app_state.is_recording():
-        return {"status": "not_recording", "transcript": ""}
+        return {
+            "status": "not_recording",
+            "transcript": "",
+            "report": ""
+        }
     
     try:
         # Signal stop event
@@ -101,10 +105,12 @@ async def stop_recording():
         
         app_state.set_recording_active(False)
         transcript = app_state.get_transcript()
+        report = app_state.get_report()
         
         return {
             "status": "recording_stopped",
-            "transcript": transcript
+            "transcript": transcript,
+            "report": report
         }
     except Exception as e:
         app_state.set_recording_active(False)
@@ -121,6 +127,21 @@ async def get_transcript():
     """
     return {
         "recording": app_state.is_recording(),
+        "transcript": app_state.get_transcript()
+    }
+
+
+@app.get("/report")
+async def get_report():
+    """
+    Get current report and recording status.
+    
+    Returns:
+        Recording status, current report, and transcript
+    """
+    return {
+        "recording": app_state.is_recording(),
+        "report": app_state.get_report(),
         "transcript": app_state.get_transcript()
     }
 

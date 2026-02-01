@@ -79,10 +79,10 @@
         }
 
         .container {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
+            display: flex;
+            flex-direction: column;
             gap: 20px;
-            max-width: 1400px;
+            max-width: 1200px;
             margin: 0 auto;
         }
 
@@ -114,7 +114,7 @@
             font-size: 14px;
             line-height: 1.5;
             resize: none;
-            min-height: 400px;
+            min-height: 500px;
         }
 
         textarea::placeholder {
@@ -187,7 +187,6 @@
             background: transparent;
             color: var(--danger);
             border: 1px solid var(--danger);
-            grid-column: 1 / -1;
         }
 
         .btn-danger:hover:not(:disabled) {
@@ -196,7 +195,6 @@
         }
 
         .btn-generate {
-            grid-column: 1 / -1;
             background: var(--success);
             color: white;
         }
@@ -261,7 +259,7 @@
 
         @media (max-width: 1024px) {
             .container {
-                grid-template-columns: 1fr;
+                gap: 20px;
             }
 
             .button-group {
@@ -305,38 +303,23 @@
     </div>
 
     <div class="container">
-        <!-- Left Column: Report -->
+        <!-- Report Card (Primary Display) -->
         <div class="card">
-            <div class="card-title">📋 Structured Report</div>
-            <textarea id="report" placeholder="Structured medical report will appear here after generation..."></textarea>
-            <div class="helper-text">Generated report with standard medical sections</div>
+            <div class="card-title">📋 Medical Report (Real-Time)</div>
+            <textarea id="report" placeholder="Start recording to generate medical report in real-time from your voice..."></textarea>
+            <div class="helper-text">Report is automatically generated and updated as you speak</div>
         </div>
 
-        <!-- Right Column: Controls & Transcript -->
-        <div class="right-column">
-            <!-- Controls Card -->
-            <div class="card controls-section">
-                <div class="card-title">🎙️ Controls</div>
-                
-                <div class="error-banner" id="errorBanner"></div>
+        <!-- Controls Card -->
+        <div class="card controls-section">
+            <div class="card-title">🎙️ Recording Controls</div>
+            
+            <div class="error-banner" id="errorBanner"></div>
 
-                <div class="button-group">
-                    <button class="btn-primary" id="startBtn" onclick="startRecording()">Start</button>
-                    <button class="btn-primary" id="stopBtn" onclick="stopRecording()" disabled>Stop</button>
-                </div>
-
-                <button class="btn-generate" id="generateBtn" onclick="generateReport()" disabled>
-                    Generate Report
-                </button>
-
+            <div class="button-group">
+                <button class="btn-primary" id="startBtn" onclick="startRecording()">Start Recording</button>
+                <button class="btn-primary" id="stopBtn" onclick="stopRecording()" disabled>Stop Recording</button>
                 <button class="btn-danger" id="clearBtn" onclick="clearAll()">Clear All</button>
-            </div>
-
-            <!-- Transcript Card -->
-            <div class="card">
-                <div class="card-title">📝 Transcript</div>
-                <textarea id="transcript" placeholder="Live transcript will appear here during recording..."></textarea>
-                <div class="helper-text">Recording auto-transcription in real-time</div>
             </div>
         </div>
     </div>
@@ -373,23 +356,11 @@
             document.getElementById('errorBanner').classList.remove('show');
         }
 
-        function setLoading(on, label = 'Processing...') {
-            const generateBtn = document.getElementById('generateBtn');
-            if (on) {
-                generateBtn.innerHTML = `<span class="loading"></span>${label}`;
-                generateBtn.disabled = true;
-            } else {
-                generateBtn.innerHTML = 'Generate Report';
-                generateBtn.disabled = false;
-            }
-        }
-
         function setRecordingState(isRecording) {
             recordingState.isRecording = isRecording;
             document.getElementById('startBtn').disabled = isRecording;
             document.getElementById('stopBtn').disabled = !isRecording;
-            document.getElementById('generateBtn').disabled = isRecording;
-            setStatus(isRecording ? 'Recording' : 'Ready', isRecording ? 'recording' : 'ready');
+            setStatus(isRecording ? 'Recording & Generating...' : 'Ready', isRecording ? 'recording' : 'ready');
         }
 
         // ======================
@@ -431,7 +402,7 @@
                 setStatus('Starting...', 'recording');
                 await apiCall('/start_recording', 'POST');
                 setRecordingState(true);
-                pollTranscript();
+                pollReport();
             } catch (error) {
                 setError(`Failed to start recording: ${error.message}`);
                 setStatus('Ready', 'ready');
@@ -446,24 +417,24 @@
                     clearInterval(recordingState.pollInterval);
                 }
                 const data = await apiCall('/stop_recording', 'POST');
-                document.getElementById('transcript').value = data.transcript || '';
+                document.getElementById('report').value = data.report || '';
                 setRecordingState(false);
-                setStatus('Ready', 'ready');
+                setStatus('Report Generated', 'ready');
             } catch (error) {
                 setError(`Failed to stop recording: ${error.message}`);
                 setStatus('Ready', 'ready');
             }
         }
 
-        function pollTranscript() {
+        function pollReport() {
             if (recordingState.pollInterval) {
                 clearInterval(recordingState.pollInterval);
             }
 
             recordingState.pollInterval = setInterval(async () => {
                 try {
-                    const data = await apiCall('/transcript');
-                    document.getElementById('transcript').value = data.transcript || '';
+                    const data = await apiCall('/report');
+                    document.getElementById('report').value = data.report || '';
 
                     // Stop polling if recording ended
                     if (!data.recording) {
@@ -477,42 +448,17 @@
         }
 
         // ======================
-        // Report Generation
-        // ======================
-
-        async function generateReport() {
-            clearError();
-            try {
-                setLoading(true, 'Generating Report...');
-                const transcript = document.getElementById('transcript').value;
-
-                if (!transcript.trim()) {
-                    throw new Error('Transcript is empty. Record audio first.');
-                }
-
-                const data = await apiCall('/generate_report', 'POST', { transcript });
-                document.getElementById('report').value = data.report || '';
-                setStatus('Report Generated', 'ready');
-            } catch (error) {
-                setError(`Failed to generate report: ${error.message}`);
-            } finally {
-                setLoading(false);
-            }
-        }
-
-        // ======================
         // Clear & Reset
         // ======================
 
         async function clearAll() {
-            if (!confirm('Clear all transcript and report?')) {
+            if (!confirm('Clear the medical report?')) {
                 return;
             }
 
             clearError();
             try {
                 await apiCall('/reset_session', 'POST');
-                document.getElementById('transcript').value = '';
                 document.getElementById('report').value = '';
                 setRecordingState(false);
                 setStatus('Ready', 'ready');
