@@ -8,6 +8,7 @@ import threading
 import queue
 import io
 import wave
+from datetime import date
 from typing import Optional
 import numpy as np
 from dotenv import load_dotenv
@@ -34,64 +35,101 @@ def get_chat_model() -> str:
 def start_transcription_worker(state: AppState) -> threading.Thread:
     """
     Start background transcription worker thread.
-    Streams audio chunks from queue to OpenAI and updates transcript.
-    
+    Periodically drains audio chunks, transcribes them via Whisper,
+    appends to the running transcript, and regenerates the medical report.
+
+    This gives the user a **live-updating** report while recording continues.
+
     Args:
         state: Global application state
-        
+
     Returns:
         Transcription worker thread
     """
+    # ~8 seconds of audio at 16 kHz with 1024-sample blocks
+    TRANSCRIBE_INTERVAL_CHUNKS = 125
+
+    def _drain_and_transcribe(audio_buffer: list) -> str:
+        """Concatenate buffered chunks, send to Whisper, return text."""
+        if not audio_buffer:
+            return ""
+        audio_data = np.concatenate(audio_buffer)
+        duration = len(audio_data) / 16000
+        print(f"📤 Sending {duration:.1f}s of audio to Whisper...")
+        text = transcribe_audio_chunks(audio_data)
+        print(f"✨ Whisper returned: {text[:120]}{'...' if len(text) > 120 else ''}")
+        return text
+
+    def _update_report(state: AppState):
+        """Regenerate structured report from full accumulated transcript."""
+        transcript = state.get_transcript()
+        if not transcript or not transcript.strip():
+            return
+        try:
+            print("📋 Regenerating structured report...")
+            report = generate_structured_report(transcript)
+            state.set_report(report)
+            print("✅ Report updated")
+        except Exception as e:
+            print(f"❌ Error generating report: {e}")
+
     def transcribe_audio():
         try:
-            audio_buffer = []
-            chunk_count = 0
-            
-            print("\n🎙️ Transcription worker started - listening for audio chunks...")
-            
+            interval_buffer: list = []   # chunks accumulated since last Whisper call
+            total_chunks = 0
+
+            print("\n🎙️ Transcription worker started (periodic mode, interval="
+                  f"{TRANSCRIBE_INTERVAL_CHUNKS} chunks ≈ "
+                  f"{TRANSCRIBE_INTERVAL_CHUNKS * 1024 / 16000:.0f}s)")
+
             while not state.stop_event.is_set():
+                # Drain available chunks from queue
                 try:
-                    # Get audio chunk with timeout
-                    try:
-                        chunk = state.audio_queue.get(timeout=0.5)
-                        audio_buffer.append(chunk)
-                        chunk_count += 1
-                        # Print status every 10 chunks to avoid spam
-                        if chunk_count % 10 == 0:
-                            print(f"📍 Captured {chunk_count} audio chunks so far...")
-                    except queue.Empty:
-                        continue
-                    
-                except Exception as e:
-                    print(f"Error processing audio chunk: {e}")
+                    chunk = state.audio_queue.get(timeout=0.5)
+                    interval_buffer.append(chunk)
+                    total_chunks += 1
+
+                    if total_chunks % 10 == 0:
+                        print(f"📍 Captured {total_chunks} audio chunks so far...")
+
+                except queue.Empty:
                     continue
-            
-            # Process remaining audio
+
+                # When enough audio has accumulated, transcribe the interval
+                if len(interval_buffer) >= TRANSCRIBE_INTERVAL_CHUNKS:
+                    try:
+                        new_text = _drain_and_transcribe(interval_buffer)
+                        interval_buffer = []
+                        if new_text.strip():
+                            state.append_transcript(" " + new_text if state.get_transcript() else new_text)
+                            _update_report(state)
+                    except Exception as e:
+                        print(f"❌ Periodic transcription error: {e}")
+                        interval_buffer = []   # discard to avoid stuck state
+
+            # ---- Recording stopped: flush remaining audio ----
             while not state.audio_queue.empty():
                 try:
                     chunk = state.audio_queue.get_nowait()
-                    audio_buffer.append(chunk)
-                    chunk_count += 1
+                    interval_buffer.append(chunk)
+                    total_chunks += 1
                 except queue.Empty:
                     break
-            
-            # Finalize transcription if we have audio
-            if audio_buffer:
-                print(f"\n✅ Recording stopped. Total chunks captured: {chunk_count}")
-                print(f"📊 Total audio duration: {len(audio_buffer) * 1024 / 16000:.2f} seconds")
+
+            if interval_buffer:
+                print(f"\n✅ Recording stopped. Flushing final {len(interval_buffer)} chunks...")
                 try:
-                    audio_data = np.concatenate(audio_buffer)
-                    print(f"🔊 Audio data shape: {audio_data.shape}")
-                    print(f"🔊 Audio min: {audio_data.min():.4f}, max: {audio_data.max():.4f}, mean: {audio_data.mean():.4f}")
-                    print(f"📤 Sending to OpenAI Whisper for transcription...")
-                    transcript = transcribe_audio_chunks(audio_data)
-                    print(f"✨ Transcription received:\n{transcript}\n")
-                    state.set_transcript(transcript)
+                    new_text = _drain_and_transcribe(interval_buffer)
+                    if new_text.strip():
+                        state.append_transcript(" " + new_text if state.get_transcript() else new_text)
+                        _update_report(state)
                 except Exception as e:
-                    print(f"❌ Error finalizing transcription: {e}")
+                    print(f"❌ Final transcription error: {e}")
             else:
-                print("\n⚠️  No audio captured - audio buffer is empty!")
-                    
+                print("\n⚠️  No remaining audio to flush")
+
+            print(f"🏁 Transcription worker finished. Total chunks processed: {total_chunks}")
+
         except Exception as e:
             print(f"Error in transcription worker: {e}")
 
@@ -129,11 +167,10 @@ def transcribe_audio_chunks(audio_data: np.ndarray) -> str:
         
         print(f"📦 Created WAV file: {len(wav_data)} bytes")
         
-        # Create transcript
+        # Create transcript — let Whisper auto-detect language (CZ/EN)
         transcript = client.audio.transcriptions.create(
             model=get_transcription_model(),
             file=("audio.wav", wav_data),
-            language="en"
         )
         
         return transcript.text
@@ -162,30 +199,34 @@ def generate_structured_report(transcript: str) -> str:
     if not transcript or not transcript.strip():
         transcript = ""
     
-    system_prompt = """You are a medical documentation specialist. Your task is to convert the given patient visit transcript into a structured medical report with the following sections:
+    today = date.today().strftime("%d. %m. %Y")
 
-1. **Patient Identification** - Name, age, date of visit
-2. **Chief Complaint / Reason for Visit** - Why the patient came
-3. **History of Present Illness (HPI)** - Details about current symptoms
-4. **Past Medical History / Allergies / Medications** - Relevant history and current medications
-5. **Objective Findings** - Vital signs, examination findings
-6. **Assessment** - Clinical impression and diagnosis
-7. **Plan** - Treatment plan and follow-up
+    system_prompt = f"""Jsi specialista na lékařskou dokumentaci. Tvým úkolem je převést přepis návštěvy pacienta do strukturované lékařské zprávy v ČESKÉM jazyce s následujícími sekcemi:
 
-Rules:
-- Do NOT invent information that is not in the transcript
-- If information for a section is missing, write: "Not mentioned in transcript"
-- Use concise, clinical language
-- Format clearly with section headers
+1. **Identifikace pacienta** – Jméno, věk, datum návštěvy (dnešní datum je {today})
+2. **Hlavní obtíže / Důvod návštěvy** – Proč pacient přišel
+3. **Anamnéza nynějšího onemocnění** – Podrobnosti o aktuálních příznacích
+4. **Osobní anamnéza / Alergie / Léky** – Relevantní historie a současná medikace
+5. **Objektivní nález** – Vitální funkce, vyšetřovací nálezy
+6. **Hodnocení** – Klinický dojem a diagnóza
+7. **Plán** – Léčebný plán a kontroly
 
-Return only the structured report, no additional commentary."""
+Pravidla:
+- NEVYMÝŠLEJ informace, které nejsou v přepisu
+- Datum návštěvy VŽDY vyplň jako {today}
+- Pokud informace pro danou sekci chybí, napiš: "Nezmíněno v přepisu"
+- Používej stručný, klinický jazyk v češtině
+- Formátuj přehledně s nadpisy sekcí
+- Celá zpráva MUSÍ být v češtině, i když je přepis v angličtině
+
+Vrať pouze strukturovanou zprávu, žádný další komentář."""
 
     try:
         response = client.chat.completions.create(
             model=get_chat_model(),
             messages=[
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"Please convert this transcript into a structured medical report:\n\n{transcript}"}
+                {"role": "user", "content": f"Převeď tento přepis do strukturované lékařské zprávy v češtině:\n\n{transcript}"}
             ],
             temperature=0.3,  # Lower temperature for more consistent output
             max_tokens=2000

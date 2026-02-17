@@ -4,6 +4,8 @@ Local application that records audio, transcribes it, and generates structured r
 """
 
 import os
+import threading
+from pathlib import Path
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -79,14 +81,18 @@ async def stop_recording():
     Stop recording and transcription.
     
     Returns:
-        Status and final transcript
+        Status, final transcript, and auto-generated report
     """
     print("\n" + "="*60)
     print("🔴 STOP_RECORDING endpoint called")
     print("="*60)
     
     if not app_state.is_recording():
-        return {"status": "not_recording", "transcript": ""}
+        return {
+            "status": "not_recording",
+            "transcript": "",
+            "report": ""
+        }
     
     try:
         # Signal stop event
@@ -101,10 +107,12 @@ async def stop_recording():
         
         app_state.set_recording_active(False)
         transcript = app_state.get_transcript()
+        report = app_state.get_report()
         
         return {
             "status": "recording_stopped",
-            "transcript": transcript
+            "transcript": transcript,
+            "report": report
         }
     except Exception as e:
         app_state.set_recording_active(False)
@@ -121,6 +129,21 @@ async def get_transcript():
     """
     return {
         "recording": app_state.is_recording(),
+        "transcript": app_state.get_transcript()
+    }
+
+
+@app.get("/report")
+async def get_report():
+    """
+    Get current report and recording status.
+    
+    Returns:
+        Recording status, current report, and transcript
+    """
+    return {
+        "recording": app_state.is_recording(),
+        "report": app_state.get_report(),
         "transcript": app_state.get_transcript()
     }
 
@@ -177,6 +200,122 @@ async def reset_session():
         return {"status": "session_reset"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error resetting session: {str(e)}")
+
+
+# ---------------------------------------------------------------------------
+# Demo / Presentation Mode Endpoints
+# ---------------------------------------------------------------------------
+
+DEMO_SCENARIOS_DIR = Path(__file__).parent / "demo_scenarios"
+
+
+@app.get("/demo/scenarios")
+async def list_demo_scenarios():
+    """
+    List available demo scenario text files.
+
+    Returns:
+        List of scenario objects with id, name and preview.
+    """
+    scenarios = []
+    if DEMO_SCENARIOS_DIR.exists():
+        for f in sorted(DEMO_SCENARIOS_DIR.glob("*.txt")):
+            text = f.read_text(encoding="utf-8").strip()
+            # Build a human-friendly name from the filename
+            raw = f.stem
+            # Czech scenario names (cz_ prefix)
+            _CZ_NAMES = {
+                "cz_kardialni_nahoda": "🇨🇿 Kardiální nehoda",
+                "cz_respiracni_infekce": "🇨🇿 Respirační infekce",
+                "cz_detska_prohlidka": "🇨🇿 Dětská prohlídka",
+                "cz_otrava_jidlem": "🇨🇿 Otrava jídlem",
+            }
+            name = _CZ_NAMES.get(raw, raw.replace("_", " ").title())
+            preview = text[:120] + ("..." if len(text) > 120 else "")
+            scenarios.append({
+                "id": f.stem,
+                "name": name,
+                "preview": preview,
+                "length": len(text.split()),
+            })
+    return {"scenarios": scenarios}
+
+
+@app.post("/demo/simulate")
+async def demo_simulate(request_data: dict):
+    """
+    Run a demo scenario with **incremental report generation**.
+
+    Splits the transcript into ~4 chunks and generates a report after each
+    chunk with a small delay, so the frontend sees the report evolving
+    in real time as the transcript panel types out words.
+
+    Args:
+        request_data: {"scenario_id": "<filename stem>"}
+
+    Returns:
+        {"status": "simulating", "transcript": "<full text>"}
+    """
+    scenario_id = request_data.get("scenario_id")
+    if not scenario_id:
+        raise HTTPException(status_code=400, detail="scenario_id is required")
+
+    scenario_file = DEMO_SCENARIOS_DIR / f"{scenario_id}.txt"
+    if not scenario_file.exists():
+        raise HTTPException(status_code=404, detail=f"Scenario '{scenario_id}' not found")
+
+    transcript = scenario_file.read_text(encoding="utf-8").strip()
+
+    # Reset state
+    app_state.reset()
+    app_state.set_recording_active(True)  # UI shows "working" state
+
+    # Generate reports incrementally in background
+    def _incremental_generate():
+        import time
+        try:
+            words = transcript.split()
+            num_chunks = 4
+            chunk_size = max(1, len(words) // num_chunks)
+
+            for i in range(num_chunks):
+                start = 0
+                end = min((i + 1) * chunk_size, len(words))
+                if i == num_chunks - 1:
+                    end = len(words)  # last chunk gets everything remaining
+
+                partial_transcript = " ".join(words[start:end])
+                app_state.set_transcript(partial_transcript)
+
+                print(f"📋 Demo: generating report for chunk {i+1}/{num_chunks} "
+                      f"({end}/{len(words)} words)...")
+                try:
+                    report = generate_structured_report(partial_transcript)
+                    app_state.set_report(report)
+                    print(f"✅ Demo: chunk {i+1} report updated")
+                except Exception as e:
+                    print(f"❌ Demo: chunk {i+1} report error: {e}")
+
+                if i < num_chunks - 1:
+                    # Wait between chunks — roughly matches typing animation speed
+                    # ~80ms per word × chunk_size words
+                    delay = min(chunk_size * 0.08, 8.0)
+                    time.sleep(delay)
+
+        except Exception as e:
+            print(f"❌ Demo incremental generation error: {e}")
+            app_state.set_report(f"Error: {e}")
+        finally:
+            app_state.set_transcript(transcript)  # ensure full transcript is set
+            app_state.set_recording_active(False)
+
+    t = threading.Thread(target=_incremental_generate, daemon=True)
+    t.start()
+
+    return {
+        "status": "simulating",
+        "transcript": transcript,
+    }
 
 
 if __name__ == "__main__":

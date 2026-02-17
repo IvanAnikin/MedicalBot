@@ -46,9 +46,7 @@ class TestIndexEndpoint:
             "MedicalBot",
             "startBtn",
             "stopBtn",
-            "generateBtn",
             "clearBtn",
-            "transcript",
             "report"
         ]
         

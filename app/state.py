@@ -25,6 +25,7 @@ class AppState:
         self.recording_thread: Optional[threading.Thread] = None
         self.transcription_thread: Optional[threading.Thread] = None
         self.current_transcript: str = ""
+        self.current_report: str = ""
         self._lock = threading.Lock()
 
     def reset(self):
@@ -34,6 +35,7 @@ class AppState:
             # Ensure stop_event signals "stopped" after a reset
             self.stop_event.set()
             self.current_transcript = ""
+            self.current_report = ""
             # Clear queue
             while not self.audio_queue.empty():
                 try:
@@ -68,6 +70,16 @@ class AppState:
         """Append text to current transcript."""
         with self._lock:
             self.current_transcript += text
+
+    def set_report(self, report: str):
+        """Update current report."""
+        with self._lock:
+            self.current_report = report
+
+    def get_report(self) -> str:
+        """Get current report."""
+        with self._lock:
+            return self.current_report
 
 
 # Global state instance
