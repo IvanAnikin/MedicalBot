@@ -244,11 +244,11 @@ async def list_demo_scenarios():
 @app.post("/demo/simulate")
 async def demo_simulate(request_data: dict):
     """
-    Run a demo scenario: load transcript from file, generate report via GPT.
+    Run a demo scenario with **incremental report generation**.
 
-    The transcript is stored in app_state so the frontend can animate it
-    word-by-word, and the report is generated in a background thread so it
-    appears while the typing animation is still running.
+    Splits the transcript into ~4 chunks and generates a report after each
+    chunk with a small delay, so the frontend sees the report evolving
+    in real time as the transcript panel types out words.
 
     Args:
         request_data: {"scenario_id": "<filename stem>"}
@@ -266,23 +266,50 @@ async def demo_simulate(request_data: dict):
 
     transcript = scenario_file.read_text(encoding="utf-8").strip()
 
-    # Reset state and store transcript
+    # Reset state
     app_state.reset()
-    app_state.set_transcript(transcript)
     app_state.set_recording_active(True)  # UI shows "working" state
 
-    # Generate report in background so the endpoint returns instantly
-    def _generate():
+    # Generate reports incrementally in background
+    def _incremental_generate():
+        import time
         try:
-            report = generate_structured_report(transcript)
-            app_state.set_report(report)
+            words = transcript.split()
+            num_chunks = 4
+            chunk_size = max(1, len(words) // num_chunks)
+
+            for i in range(num_chunks):
+                start = 0
+                end = min((i + 1) * chunk_size, len(words))
+                if i == num_chunks - 1:
+                    end = len(words)  # last chunk gets everything remaining
+
+                partial_transcript = " ".join(words[start:end])
+                app_state.set_transcript(partial_transcript)
+
+                print(f"📋 Demo: generating report for chunk {i+1}/{num_chunks} "
+                      f"({end}/{len(words)} words)...")
+                try:
+                    report = generate_structured_report(partial_transcript)
+                    app_state.set_report(report)
+                    print(f"✅ Demo: chunk {i+1} report updated")
+                except Exception as e:
+                    print(f"❌ Demo: chunk {i+1} report error: {e}")
+
+                if i < num_chunks - 1:
+                    # Wait between chunks — roughly matches typing animation speed
+                    # ~80ms per word × chunk_size words
+                    delay = min(chunk_size * 0.08, 8.0)
+                    time.sleep(delay)
+
         except Exception as e:
-            print(f"❌ Demo report generation error: {e}")
-            app_state.set_report(f"Error generating report: {e}")
+            print(f"❌ Demo incremental generation error: {e}")
+            app_state.set_report(f"Error: {e}")
         finally:
+            app_state.set_transcript(transcript)  # ensure full transcript is set
             app_state.set_recording_active(False)
 
-    t = threading.Thread(target=_generate, daemon=True)
+    t = threading.Thread(target=_incremental_generate, daemon=True)
     t.start()
 
     return {

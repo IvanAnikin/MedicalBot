@@ -683,6 +683,16 @@
                 setStatus('Spouštění...', 'recording');
                 await apiCall('/start_recording', 'POST');
                 setRecordingState(true);
+
+                // Show transcript side panel for live updates
+                const transcriptPanel = document.getElementById('transcriptPanel');
+                const transcriptText = document.getElementById('transcriptText');
+                const transcriptStatus = document.getElementById('transcriptStatus');
+                transcriptText.innerHTML = '<span style="color:var(--text-secondary);font-style:italic">Čekání na řeč...</span>';
+                transcriptStatus.textContent = 'Nahrávání...';
+                transcriptPanel.classList.add('visible');
+                document.getElementById('report').value = '';
+
                 pollReport();
             } catch (error) {
                 setError(`Nepodařilo se spustit nahrávání: ${error.message}`);
@@ -693,12 +703,21 @@
         async function stopRecording() {
             clearError();
             try {
-                setStatus('Zastavování...', 'recording');
+                setStatus('Dokončování...', 'recording');
                 if (recordingState.pollInterval) {
                     clearInterval(recordingState.pollInterval);
                 }
                 const data = await apiCall('/stop_recording', 'POST');
                 document.getElementById('report').value = data.report || '';
+
+                // Update transcript panel with final transcript
+                const transcriptText = document.getElementById('transcriptText');
+                const transcriptStatus = document.getElementById('transcriptStatus');
+                if (data.transcript) {
+                    transcriptText.textContent = data.transcript;
+                }
+                transcriptStatus.textContent = 'Dokončeno';
+
                 setRecordingState(false);
                 setStatus('Zpráva vygenerována', 'ready');
             } catch (error) {
@@ -715,7 +734,19 @@
             recordingState.pollInterval = setInterval(async () => {
                 try {
                     const data = await apiCall('/report');
-                    document.getElementById('report').value = data.report || '';
+                    // Update report textarea
+                    if (data.report) {
+                        document.getElementById('report').value = data.report;
+                    }
+
+                    // Update transcript side panel
+                    const transcriptText = document.getElementById('transcriptText');
+                    const transcriptStatus = document.getElementById('transcriptStatus');
+                    if (data.transcript) {
+                        transcriptText.textContent = data.transcript;
+                        transcriptText.scrollTop = transcriptText.scrollHeight;
+                        transcriptStatus.textContent = data.recording ? 'Nahrávání...' : 'Dokončeno';
+                    }
 
                     // Stop polling if recording ended
                     if (!data.recording) {
@@ -741,6 +772,9 @@
             try {
                 await apiCall('/reset_session', 'POST');
                 document.getElementById('report').value = '';
+                // Hide transcript panel
+                document.getElementById('transcriptPanel').classList.remove('visible');
+                document.getElementById('transcriptText').innerHTML = '';
                 setRecordingState(false);
                 setStatus('Připraveno', 'ready');
             } catch (error) {
@@ -830,8 +864,25 @@
 
             setStatus('Simulace...', 'recording');
 
+            // Start polling for report updates immediately (backend generates incrementally)
+            let demoPollInterval = setInterval(async () => {
+                try {
+                    const poll = await apiCall('/report');
+                    if (poll.report) {
+                        reportEl.value = poll.report;
+                        reportEl.scrollTop = reportEl.scrollHeight;
+                    }
+                    if (!poll.recording) {
+                        clearInterval(demoPollInterval);
+                        demoPollInterval = null;
+                    }
+                } catch (e) {
+                    console.error('Demo poll error:', e);
+                }
+            }, 1000);
+
             try {
-                // 1. Call backend — starts report generation in background
+                // 1. Call backend — starts incremental report generation in background
                 const data = await apiCall('/demo/simulate', 'POST', {
                     scenario_id: demoState.selectedScenario,
                 });
@@ -842,11 +893,10 @@
                 // 2. Type out transcript word-by-word into side panel
                 let typed = '';
                 for (let i = 0; i < words.length; i++) {
-                    if (signal.aborted) return;
+                    if (signal.aborted) break;
                     typed += words[i];
                     transcriptText.innerHTML = typed + '<span class="cursor">▊</span>';
                     transcriptText.scrollTop = transcriptText.scrollHeight;
-                    // Vary speed: whitespace is instant, words get a delay (~80ms for slower pace)
                     if (words[i].trim()) {
                         await sleep(80, signal);
                     }
@@ -855,38 +905,36 @@
                 // Remove cursor after typing finishes
                 transcriptText.innerHTML = typed;
                 transcriptStatus.textContent = 'Dokončeno';
-                setStatus('Generování zprávy...', 'recording');
 
-                // 3. Poll for report until it arrives
-                let report = '';
-                for (let attempt = 0; attempt < 120; attempt++) {   // up to 60s
-                    if (signal.aborted) return;
-                    const poll = await apiCall('/report');
-                    if (poll.report && !poll.recording) {
-                        report = poll.report;
-                        break;
+                // 3. Wait for final report if backend is still working
+                if (demoPollInterval) {
+                    setStatus('Dokončování zprávy...', 'recording');
+                    for (let attempt = 0; attempt < 120; attempt++) {
+                        if (signal.aborted) break;
+                        const poll = await apiCall('/report');
+                        if (poll.report) {
+                            reportEl.value = poll.report;
+                        }
+                        if (!poll.recording) {
+                            break;
+                        }
+                        await sleep(500, signal);
                     }
-                    await sleep(500, signal);
+                    if (demoPollInterval) {
+                        clearInterval(demoPollInterval);
+                        demoPollInterval = null;
+                    }
                 }
 
-                // 4. Reveal report with a quick fade-in effect
-                if (report) {
-                    reportEl.style.opacity = '0';
-                    reportEl.value = report;
-                    reportEl.scrollTop = 0;
-                    await sleep(50);
-                    reportEl.style.transition = 'opacity 0.4s ease';
-                    reportEl.style.opacity = '1';
-                    setTimeout(() => { reportEl.style.transition = ''; }, 500);
-                    setStatus('Zpráva vygenerována', 'ready');
-                } else {
-                    setStatus('Časový limit vypršel', 'ready');
-                }
+                setStatus('Zpráva vygenerována', 'ready');
 
             } catch (error) {
                 setError(`Simulace selhala: ${error.message}`);
                 setStatus('Připraveno', 'ready');
             } finally {
+                if (demoPollInterval) {
+                    clearInterval(demoPollInterval);
+                }
                 document.getElementById('simulateBtn').disabled = false;
                 document.getElementById('startBtn').disabled = false;
             }
