@@ -8,6 +8,7 @@ import threading
 import queue
 import io
 import wave
+from datetime import date
 from typing import Optional
 import numpy as np
 from dotenv import load_dotenv
@@ -173,30 +174,34 @@ def generate_structured_report(transcript: str) -> str:
     if not transcript or not transcript.strip():
         transcript = ""
     
-    system_prompt = """You are a medical documentation specialist. Your task is to convert the given patient visit transcript into a structured medical report with the following sections:
+    today = date.today().strftime("%d. %m. %Y")
 
-1. **Patient Identification** - Name, age, date of visit
-2. **Chief Complaint / Reason for Visit** - Why the patient came
-3. **History of Present Illness (HPI)** - Details about current symptoms
-4. **Past Medical History / Allergies / Medications** - Relevant history and current medications
-5. **Objective Findings** - Vital signs, examination findings
-6. **Assessment** - Clinical impression and diagnosis
-7. **Plan** - Treatment plan and follow-up
+    system_prompt = f"""Jsi specialista na lékařskou dokumentaci. Tvým úkolem je převést přepis návštěvy pacienta do strukturované lékařské zprávy v ČESKÉM jazyce s následujícími sekcemi:
 
-Rules:
-- Do NOT invent information that is not in the transcript
-- If information for a section is missing, write: "Not mentioned in transcript"
-- Use concise, clinical language
-- Format clearly with section headers
+1. **Identifikace pacienta** – Jméno, věk, datum návštěvy (dnešní datum je {today})
+2. **Hlavní obtíže / Důvod návštěvy** – Proč pacient přišel
+3. **Anamnéza nynějšího onemocnění** – Podrobnosti o aktuálních příznacích
+4. **Osobní anamnéza / Alergie / Léky** – Relevantní historie a současná medikace
+5. **Objektivní nález** – Vitální funkce, vyšetřovací nálezy
+6. **Hodnocení** – Klinický dojem a diagnóza
+7. **Plán** – Léčebný plán a kontroly
 
-Return only the structured report, no additional commentary."""
+Pravidla:
+- NEVYMÝŠLEJ informace, které nejsou v přepisu
+- Datum návštěvy VŽDY vyplň jako {today}
+- Pokud informace pro danou sekci chybí, napiš: "Nezmíněno v přepisu"
+- Používej stručný, klinický jazyk v češtině
+- Formátuj přehledně s nadpisy sekcí
+- Celá zpráva MUSÍ být v češtině, i když je přepis v angličtině
+
+Vrať pouze strukturovanou zprávu, žádný další komentář."""
 
     try:
         response = client.chat.completions.create(
             model=get_chat_model(),
             messages=[
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"Please convert this transcript into a structured medical report:\n\n{transcript}"}
+                {"role": "user", "content": f"Převeď tento přepis do strukturované lékařské zprávy v češtině:\n\n{transcript}"}
             ],
             temperature=0.3,  # Lower temperature for more consistent output
             max_tokens=2000

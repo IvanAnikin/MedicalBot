@@ -4,6 +4,8 @@ Local application that records audio, transcribes it, and generates structured r
 """
 
 import os
+import threading
+from pathlib import Path
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -198,6 +200,95 @@ async def reset_session():
         return {"status": "session_reset"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error resetting session: {str(e)}")
+
+
+# ---------------------------------------------------------------------------
+# Demo / Presentation Mode Endpoints
+# ---------------------------------------------------------------------------
+
+DEMO_SCENARIOS_DIR = Path(__file__).parent / "demo_scenarios"
+
+
+@app.get("/demo/scenarios")
+async def list_demo_scenarios():
+    """
+    List available demo scenario text files.
+
+    Returns:
+        List of scenario objects with id, name and preview.
+    """
+    scenarios = []
+    if DEMO_SCENARIOS_DIR.exists():
+        for f in sorted(DEMO_SCENARIOS_DIR.glob("*.txt")):
+            text = f.read_text(encoding="utf-8").strip()
+            # Build a human-friendly name from the filename
+            raw = f.stem
+            # Czech scenario names (cz_ prefix)
+            _CZ_NAMES = {
+                "cz_kardialni_nahoda": "🇨🇿 Kardiální nehoda",
+                "cz_respiracni_infekce": "🇨🇿 Respirační infekce",
+                "cz_detska_prohlidka": "🇨🇿 Dětská prohlídka",
+                "cz_otrava_jidlem": "🇨🇿 Otrava jídlem",
+            }
+            name = _CZ_NAMES.get(raw, raw.replace("_", " ").title())
+            preview = text[:120] + ("..." if len(text) > 120 else "")
+            scenarios.append({
+                "id": f.stem,
+                "name": name,
+                "preview": preview,
+                "length": len(text.split()),
+            })
+    return {"scenarios": scenarios}
+
+
+@app.post("/demo/simulate")
+async def demo_simulate(request_data: dict):
+    """
+    Run a demo scenario: load transcript from file, generate report via GPT.
+
+    The transcript is stored in app_state so the frontend can animate it
+    word-by-word, and the report is generated in a background thread so it
+    appears while the typing animation is still running.
+
+    Args:
+        request_data: {"scenario_id": "<filename stem>"}
+
+    Returns:
+        {"status": "simulating", "transcript": "<full text>"}
+    """
+    scenario_id = request_data.get("scenario_id")
+    if not scenario_id:
+        raise HTTPException(status_code=400, detail="scenario_id is required")
+
+    scenario_file = DEMO_SCENARIOS_DIR / f"{scenario_id}.txt"
+    if not scenario_file.exists():
+        raise HTTPException(status_code=404, detail=f"Scenario '{scenario_id}' not found")
+
+    transcript = scenario_file.read_text(encoding="utf-8").strip()
+
+    # Reset state and store transcript
+    app_state.reset()
+    app_state.set_transcript(transcript)
+    app_state.set_recording_active(True)  # UI shows "working" state
+
+    # Generate report in background so the endpoint returns instantly
+    def _generate():
+        try:
+            report = generate_structured_report(transcript)
+            app_state.set_report(report)
+        except Exception as e:
+            print(f"❌ Demo report generation error: {e}")
+            app_state.set_report(f"Error generating report: {e}")
+        finally:
+            app_state.set_recording_active(False)
+
+    t = threading.Thread(target=_generate, daemon=True)
+    t.start()
+
+    return {
+        "status": "simulating",
+        "transcript": transcript,
+    }
 
 
 if __name__ == "__main__":

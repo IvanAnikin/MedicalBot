@@ -1,11 +1,31 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="cs">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MedicalBot - Medical Report Assistant</title>
+    <title>ANOTE — Lékařský asistent</title>
     <style>
+        /* ===== Light mode (default) ===== */
         :root {
+            --bg: #f1f5f9;
+            --bg-secondary: #e2e8f0;
+            --card: #ffffff;
+            --border: #cbd5e1;
+            --text: #1e293b;
+            --text-secondary: #475569;
+            --accent: #0891b2;
+            --accent-hover: #0e7490;
+            --danger: #dc2626;
+            --danger-hover: #b91c1c;
+            --success: #059669;
+            --shadow: rgba(0, 0, 0, 0.08);
+            --accent-bg: rgba(8, 145, 178, 0.08);
+            --danger-bg: rgba(220, 38, 38, 0.08);
+            --success-bg: rgba(5, 150, 105, 0.08);
+        }
+
+        /* ===== Dark mode ===== */
+        [data-theme="dark"] {
             --bg: #0f172a;
             --bg-secondary: #1e293b;
             --card: #1e293b;
@@ -17,6 +37,10 @@
             --danger: #ef4444;
             --danger-hover: #dc2626;
             --success: #10b981;
+            --shadow: rgba(0, 0, 0, 0.3);
+            --accent-bg: rgba(6, 182, 212, 0.1);
+            --danger-bg: rgba(239, 68, 68, 0.1);
+            --success-bg: rgba(239, 68, 68, 0.1);
         }
 
         * {
@@ -61,13 +85,13 @@
         }
 
         .status-pill.ready {
-            background: rgba(16, 185, 129, 0.1);
+            background: var(--success-bg);
             color: var(--success);
             border-color: var(--success);
         }
 
         .status-pill.recording {
-            background: rgba(239, 68, 68, 0.1);
+            background: var(--danger-bg);
             color: var(--danger);
             border-color: var(--danger);
             animation: pulse 1.5s ease-in-out infinite;
@@ -86,6 +110,94 @@
             margin: 0 auto;
         }
 
+        /* ===== Main layout with transcript side panel ===== */
+        .main-layout {
+            display: flex;
+            gap: 20px;
+            max-width: 1600px;
+            margin: 0 auto;
+            width: 100%;
+        }
+
+        .main-content {
+            flex: 2;
+            min-width: 0;
+        }
+
+        .transcript-panel {
+            flex: 1;
+            max-width: 33.333%;
+            display: none;
+            flex-direction: column;
+        }
+
+        .transcript-panel.visible {
+            display: flex;
+        }
+
+        .transcript-panel .card {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .transcript-text {
+            flex: 1;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 16px;
+            color: var(--text);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            font-size: 15px;
+            line-height: 1.7;
+            min-height: 500px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+
+        .transcript-text .cursor {
+            display: inline;
+            animation: blink 0.7s step-end infinite;
+            color: var(--accent);
+            font-weight: bold;
+        }
+
+        .transcript-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 16px;
+        }
+
+        .transcript-header .card-title {
+            margin-bottom: 0;
+        }
+
+        .transcript-status {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--accent);
+            padding: 4px 10px;
+            border-radius: 12px;
+            background: var(--accent-bg);
+        }
+
+        @media (max-width: 900px) {
+            .main-layout {
+                flex-direction: column;
+            }
+
+            .transcript-panel {
+                max-width: 100%;
+            }
+
+            .transcript-text {
+                min-height: 200px;
+            }
+        }
+
         .card {
             background: var(--card);
             border: 1px solid var(--border);
@@ -93,7 +205,7 @@
             padding: 24px;
             display: flex;
             flex-direction: column;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            box-shadow: 0 10px 30px var(--shadow);
         }
 
         .card-title {
@@ -124,7 +236,7 @@
         textarea:focus {
             outline: none;
             border-color: var(--accent);
-            box-shadow: 0 0 0 2px rgba(6, 182, 212, 0.1);
+            box-shadow: 0 0 0 2px var(--accent-bg);
         }
 
         .controls-section {
@@ -159,7 +271,7 @@
         .btn-primary:hover:not(:disabled) {
             background: var(--accent-hover);
             transform: translateY(-2px);
-            box-shadow: 0 8px 16px rgba(6, 182, 212, 0.3);
+            box-shadow: 0 8px 16px var(--accent-bg);
         }
 
         .btn-primary:disabled {
@@ -190,7 +302,7 @@
         }
 
         .btn-danger:hover:not(:disabled) {
-            background: rgba(239, 68, 68, 0.1);
+            background: var(--danger-bg);
             border-color: var(--danger-hover);
         }
 
@@ -206,7 +318,7 @@
 
         .error-banner {
             display: none;
-            background: rgba(239, 68, 68, 0.1);
+            background: var(--danger-bg);
             border: 1px solid var(--danger);
             border-radius: 8px;
             padding: 12px 16px;
@@ -240,7 +352,7 @@
             display: inline-block;
             width: 16px;
             height: 16px;
-            border: 2px solid rgba(6, 182, 212, 0.3);
+            border: 2px solid var(--accent-bg);
             border-top-color: var(--accent);
             border-radius: 50%;
             animation: spin 0.8s linear infinite;
@@ -255,6 +367,113 @@
             display: flex;
             flex-direction: column;
             gap: 20px;
+        }
+
+        /* ---------- Demo Mode ---------- */
+        .demo-toggle {
+            text-align: center;
+            margin-top: 8px;
+        }
+
+        .demo-toggle button {
+            background: transparent;
+            color: var(--accent);
+            border: 1px dashed var(--accent);
+            padding: 8px 20px;
+            font-size: 13px;
+            letter-spacing: 0;
+            text-transform: none;
+        }
+
+        .demo-toggle button:hover {
+            background: var(--accent-bg);
+        }
+
+        .demo-panel {
+            display: none;
+        }
+
+        .demo-panel.open {
+            display: flex;
+        }
+
+        .scenario-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .scenario-card {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 14px 16px;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+
+        .scenario-card:hover {
+            border-color: var(--accent);
+            background: var(--accent-bg);
+        }
+
+        .scenario-card.selected {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 2px var(--accent-bg);
+        }
+
+        .scenario-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .scenario-name {
+            font-weight: 600;
+            font-size: 15px;
+            margin-bottom: 4px;
+        }
+
+        .scenario-preview {
+            font-size: 12px;
+            color: var(--text-secondary);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .scenario-meta {
+            font-size: 11px;
+            color: var(--text-secondary);
+            white-space: nowrap;
+        }
+
+        .btn-demo {
+            background: linear-gradient(135deg, #8b5cf6, #6d28d9);
+            color: white;
+        }
+
+        .btn-demo:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 16px rgba(139, 92, 246, 0.25);
+        }
+
+        .btn-demo:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .typing-cursor::after {
+            content: '▊';
+            animation: blink 0.7s step-end infinite;
+            color: var(--accent);
+        }
+
+        @keyframes blink {
+            50% { opacity: 0; }
         }
 
         @media (max-width: 640px) {
@@ -284,32 +503,104 @@
                 grid-template-columns: 1fr;
             }
         }
+        /* ===== Theme toggle ===== */
+        .theme-toggle {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 8px 14px;
+            cursor: pointer;
+            font-size: 18px;
+            line-height: 1;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .theme-toggle:hover {
+            border-color: var(--accent);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px var(--shadow);
+        }
+
+        .theme-toggle .label {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
     </style>
 </head>
 <body>
     <div class="header">
-        <h1>🏥 MedicalBot</h1>
-        <div class="status-pill ready" id="statusPill">Ready</div>
+        <h1>🩺 ANOTE</h1>
+        <div class="header-right">
+            <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" title="Přepnout světlý/tmavý režim">
+                <span id="themeIcon">🌙</span>
+                <span class="label" id="themeLabel">Tmavý</span>
+            </button>
+            <div class="status-pill ready" id="statusPill">Připraveno</div>
+        </div>
     </div>
 
-    <div class="container">
-        <!-- Report Card (Primary Display) -->
-        <div class="card">
-            <div class="card-title">📋 Medical Report (Real-Time)</div>
-            <textarea id="report" placeholder="Start recording to generate medical report in real-time from your voice..."></textarea>
-            <div class="helper-text">Report is automatically generated and updated as you speak</div>
+    <div class="main-layout">
+        <div class="main-content">
+            <div class="container">
+                <!-- Report Card (Primary Display) -->
+                <div class="card">
+                    <div class="card-title">📋 Lékařská zpráva</div>
+                    <textarea id="report" placeholder="Začněte nahrávat pro automatické generování lékařské zprávy z vašeho hlasu..."></textarea>
+                    <div class="helper-text">Zpráva se automaticky generuje a aktualizuje během řeči</div>
+                </div>
+
+                <!-- Controls Card -->
+                <div class="card controls-section">
+                    <div class="card-title">🎙️ Ovládání nahrávání</div>
+                    
+                    <div class="error-banner" id="errorBanner"></div>
+
+                    <div class="button-group">
+                        <button class="btn-primary" id="startBtn" onclick="startRecording()">Spustit nahrávání</button>
+                        <button class="btn-primary" id="stopBtn" onclick="stopRecording()" disabled>Zastavit nahrávání</button>
+                        <button class="btn-danger" id="clearBtn" onclick="clearAll()">Vymazat vše</button>
+                    </div>
+                </div>
+
+                <!-- Demo Mode Toggle -->
+                <div class="demo-toggle">
+                    <button onclick="toggleDemoPanel()">🎬 Demo / Prezentační režim</button>
+                </div>
+
+                <!-- Demo Panel -->
+                <div class="card controls-section demo-panel" id="demoPanel">
+                    <div class="card-title">🎬 Demo režim — Vyberte scénář</div>
+                    <div class="scenario-list" id="scenarioList">
+                        <div class="helper-text">Načítání scénářů...</div>
+                    </div>
+                    <button class="btn-demo" id="simulateBtn" onclick="runSimulation()" disabled>
+                        ▶ Spustit simulaci
+                    </button>
+                    <div class="helper-text">Přepis se zobrazí slovo po slově, poté se automaticky vygeneruje lékařská zpráva</div>
+                </div>
+            </div>
         </div>
 
-        <!-- Controls Card -->
-        <div class="card controls-section">
-            <div class="card-title">🎙️ Recording Controls</div>
-            
-            <div class="error-banner" id="errorBanner"></div>
-
-            <div class="button-group">
-                <button class="btn-primary" id="startBtn" onclick="startRecording()">Start Recording</button>
-                <button class="btn-primary" id="stopBtn" onclick="stopRecording()" disabled>Stop Recording</button>
-                <button class="btn-danger" id="clearBtn" onclick="clearAll()">Clear All</button>
+        <!-- Transcript Side Panel (appears during demo simulation) -->
+        <div class="transcript-panel" id="transcriptPanel">
+            <div class="card">
+                <div class="transcript-header">
+                    <div class="card-title">🎤 Přepis řeči</div>
+                    <div class="transcript-status" id="transcriptStatus">Probíhá...</div>
+                </div>
+                <div class="transcript-text" id="transcriptText"></div>
             </div>
         </div>
     </div>
@@ -350,7 +641,7 @@
             recordingState.isRecording = isRecording;
             document.getElementById('startBtn').disabled = isRecording;
             document.getElementById('stopBtn').disabled = !isRecording;
-            setStatus(isRecording ? 'Recording & Generating...' : 'Ready', isRecording ? 'recording' : 'ready');
+            setStatus(isRecording ? 'Nahrávání & generování...' : 'Připraveno', isRecording ? 'recording' : 'ready');
         }
 
         // ======================
@@ -389,30 +680,30 @@
         async function startRecording() {
             clearError();
             try {
-                setStatus('Starting...', 'recording');
+                setStatus('Spouštění...', 'recording');
                 await apiCall('/start_recording', 'POST');
                 setRecordingState(true);
                 pollReport();
             } catch (error) {
-                setError(`Failed to start recording: ${error.message}`);
-                setStatus('Ready', 'ready');
+                setError(`Nepodařilo se spustit nahrávání: ${error.message}`);
+                setStatus('Připraveno', 'ready');
             }
         }
 
         async function stopRecording() {
             clearError();
             try {
-                setStatus('Stopping...', 'recording');
+                setStatus('Zastavování...', 'recording');
                 if (recordingState.pollInterval) {
                     clearInterval(recordingState.pollInterval);
                 }
                 const data = await apiCall('/stop_recording', 'POST');
                 document.getElementById('report').value = data.report || '';
                 setRecordingState(false);
-                setStatus('Report Generated', 'ready');
+                setStatus('Zpráva vygenerována', 'ready');
             } catch (error) {
-                setError(`Failed to stop recording: ${error.message}`);
-                setStatus('Ready', 'ready');
+                setError(`Nepodařilo se zastavit nahrávání: ${error.message}`);
+                setStatus('Připraveno', 'ready');
             }
         }
 
@@ -442,7 +733,7 @@
         // ======================
 
         async function clearAll() {
-            if (!confirm('Clear the medical report?')) {
+            if (!confirm('Vymazat lékařskou zprávu?')) {
                 return;
             }
 
@@ -451,10 +742,204 @@
                 await apiCall('/reset_session', 'POST');
                 document.getElementById('report').value = '';
                 setRecordingState(false);
-                setStatus('Ready', 'ready');
+                setStatus('Připraveno', 'ready');
             } catch (error) {
-                setError(`Failed to clear session: ${error.message}`);
+                setError(`Nepodařilo se vymazat relaci: ${error.message}`);
             }
+        }
+
+        // ======================
+        // Demo / Presentation Mode
+        // ======================
+
+        let demoState = {
+            selectedScenario: null,
+            typingAbort: null,        // AbortController for cancelling typing
+            scenarios: [],
+        };
+
+        function toggleDemoPanel() {
+            const panel = document.getElementById('demoPanel');
+            const isOpen = panel.classList.toggle('open');
+            if (isOpen && demoState.scenarios.length === 0) {
+                loadScenarios();
+            }
+        }
+
+        async function loadScenarios() {
+            try {
+                const data = await apiCall('/demo/scenarios');
+                demoState.scenarios = data.scenarios;
+                renderScenarios();
+            } catch (error) {
+                document.getElementById('scenarioList').innerHTML =
+                    '<div class="helper-text" style="color:var(--danger)">Nepodařilo se načíst scénáře</div>';
+            }
+        }
+
+        function renderScenarios() {
+            const list = document.getElementById('scenarioList');
+            if (demoState.scenarios.length === 0) {
+                list.innerHTML = '<div class="helper-text">Žádné scénáře nenalezeny v demo_scenarios/</div>';
+                return;
+            }
+
+            list.innerHTML = demoState.scenarios.map(s => `
+                <div class="scenario-card ${demoState.selectedScenario === s.id ? 'selected' : ''}"
+                     onclick="selectScenario('${s.id}')">
+                    <div class="scenario-info">
+                        <div class="scenario-name">${s.name}</div>
+                        <div class="scenario-preview">${s.preview}</div>
+                    </div>
+                    <div class="scenario-meta">${s.length} slov</div>
+                </div>
+            `).join('');
+        }
+
+        function selectScenario(id) {
+            demoState.selectedScenario = id;
+            document.getElementById('simulateBtn').disabled = false;
+            renderScenarios();
+        }
+
+        async function runSimulation() {
+            if (!demoState.selectedScenario) return;
+
+            // Cancel any running typing animation
+            if (demoState.typingAbort) {
+                demoState.typingAbort.abort();
+            }
+            demoState.typingAbort = new AbortController();
+            const signal = demoState.typingAbort.signal;
+
+            clearError();
+            const reportEl = document.getElementById('report');
+            const transcriptPanel = document.getElementById('transcriptPanel');
+            const transcriptText = document.getElementById('transcriptText');
+            const transcriptStatus = document.getElementById('transcriptStatus');
+
+            reportEl.value = '';
+            transcriptText.innerHTML = '';
+            transcriptStatus.textContent = 'Probíhá...';
+            transcriptPanel.classList.add('visible');
+
+            // Disable buttons during simulation
+            document.getElementById('simulateBtn').disabled = true;
+            document.getElementById('startBtn').disabled = true;
+            document.getElementById('stopBtn').disabled = true;
+
+            setStatus('Simulace...', 'recording');
+
+            try {
+                // 1. Call backend — starts report generation in background
+                const data = await apiCall('/demo/simulate', 'POST', {
+                    scenario_id: demoState.selectedScenario,
+                });
+
+                const transcript = data.transcript;
+                const words = transcript.split(/(\s+)/);  // keep whitespace tokens
+
+                // 2. Type out transcript word-by-word into side panel
+                let typed = '';
+                for (let i = 0; i < words.length; i++) {
+                    if (signal.aborted) return;
+                    typed += words[i];
+                    transcriptText.innerHTML = typed + '<span class="cursor">▊</span>';
+                    transcriptText.scrollTop = transcriptText.scrollHeight;
+                    // Vary speed: whitespace is instant, words get a delay (~80ms for slower pace)
+                    if (words[i].trim()) {
+                        await sleep(80, signal);
+                    }
+                }
+
+                // Remove cursor after typing finishes
+                transcriptText.innerHTML = typed;
+                transcriptStatus.textContent = 'Dokončeno';
+                setStatus('Generování zprávy...', 'recording');
+
+                // 3. Poll for report until it arrives
+                let report = '';
+                for (let attempt = 0; attempt < 120; attempt++) {   // up to 60s
+                    if (signal.aborted) return;
+                    const poll = await apiCall('/report');
+                    if (poll.report && !poll.recording) {
+                        report = poll.report;
+                        break;
+                    }
+                    await sleep(500, signal);
+                }
+
+                // 4. Reveal report with a quick fade-in effect
+                if (report) {
+                    reportEl.style.opacity = '0';
+                    reportEl.value = report;
+                    reportEl.scrollTop = 0;
+                    await sleep(50);
+                    reportEl.style.transition = 'opacity 0.4s ease';
+                    reportEl.style.opacity = '1';
+                    setTimeout(() => { reportEl.style.transition = ''; }, 500);
+                    setStatus('Zpráva vygenerována', 'ready');
+                } else {
+                    setStatus('Časový limit vypršel', 'ready');
+                }
+
+            } catch (error) {
+                setError(`Simulace selhala: ${error.message}`);
+                setStatus('Připraveno', 'ready');
+            } finally {
+                document.getElementById('simulateBtn').disabled = false;
+                document.getElementById('startBtn').disabled = false;
+            }
+        }
+
+        /** Promise-based sleep that can be aborted */
+        function sleep(ms, signal) {
+            return new Promise((resolve, reject) => {
+                const timer = setTimeout(resolve, ms);
+                if (signal) {
+                    signal.addEventListener('abort', () => {
+                        clearTimeout(timer);
+                        resolve();           // resolve quietly on abort
+                    }, { once: true });
+                }
+            });
+        }
+
+        // ======================
+        // Initialization
+        // ======================
+
+        // ======================
+        // Theme Switching
+        // ======================
+
+        function toggleTheme() {
+            const html = document.documentElement;
+            const isDark = html.getAttribute('data-theme') === 'dark';
+            if (isDark) {
+                html.removeAttribute('data-theme');
+                localStorage.setItem('theme', 'light');
+            } else {
+                html.setAttribute('data-theme', 'dark');
+                localStorage.setItem('theme', 'dark');
+            }
+            updateThemeUI();
+        }
+
+        function updateThemeUI() {
+            const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+            document.getElementById('themeIcon').textContent = isDark ? '☀️' : '🌙';
+            document.getElementById('themeLabel').textContent = isDark ? 'Světlý' : 'Tmavý';
+        }
+
+        function applyStoredTheme() {
+            const stored = localStorage.getItem('theme');
+            if (stored === 'dark') {
+                document.documentElement.setAttribute('data-theme', 'dark');
+            } else {
+                document.documentElement.removeAttribute('data-theme');
+            }
+            updateThemeUI();
         }
 
         // ======================
@@ -462,8 +947,9 @@
         // ======================
 
         document.addEventListener('DOMContentLoaded', () => {
-            setStatus('Ready', 'ready');
-            console.log('MedicalBot UI initialized');
+            applyStoredTheme();
+            setStatus('Připraveno', 'ready');
+            console.log('Automatická Anamnéza UI initialized');
         });
     </script>
 </body>
