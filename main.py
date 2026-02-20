@@ -275,7 +275,7 @@ async def demo_simulate(request_data: dict):
         import time
         try:
             words = transcript.split()
-            num_chunks = 4
+            num_chunks = 8
             chunk_size = max(1, len(words) // num_chunks)
 
             for i in range(num_chunks):

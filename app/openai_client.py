@@ -46,8 +46,8 @@ def start_transcription_worker(state: AppState) -> threading.Thread:
     Returns:
         Transcription worker thread
     """
-    # ~8 seconds of audio at 16 kHz with 1024-sample blocks
-    TRANSCRIBE_INTERVAL_CHUNKS = 125
+    # ~4 seconds of audio at 16 kHz with 1024-sample blocks
+    TRANSCRIBE_INTERVAL_CHUNKS = 63
 
     def _drain_and_transcribe(audio_buffer: list) -> str:
         """Concatenate buffered chunks, send to Whisper, return text."""
